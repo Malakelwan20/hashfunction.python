@@ -1,0 +1,49 @@
+PSEUDOCODE: Hash Function Implementation and Comparison in Python
+
+START
+
+DISPLAY "Hash Function Implementation and Comparison"
+
+INPUT userText
+
+/* Generate Hashes */
+CONVERT userText to bytes
+
+md5Hash    = Generate MD5 hash of userText
+sha1Hash   = Generate SHA1 hash of userText
+sha256Hash = Generate SHA256 hash of userText
+
+/* Display Results */
+DISPLAY "Original Text: ", userText
+DISPLAY "MD5 Hash: ", md5Hash
+DISPLAY "SHA-1 Hash: ", sha1Hash
+DISPLAY "SHA-256 Hash: ", sha256Hash
+
+/* Compare Lengths */
+DISPLAY "MD5 Length = 128 bits"
+DISPLAY "SHA-1 Length = 160 bits"
+DISPLAY "SHA-256 Length = 256 bits"
+
+/* Security Analysis */
+IF algorithm = MD5 THEN
+    DISPLAY "MD5 is weak because collisions were found."
+END IF
+
+IF algorithm = SHA1 THEN
+    DISPLAY "SHA-1 is stronger than MD5 but no longer recommended."
+END IF
+
+IF algorithm = SHA256 THEN
+    DISPLAY "SHA-256 is safest among these three."
+    DISPLAY "It has larger output and better resistance to attacks."
+END IF
+
+/* Final Comparison */
+DISPLAY "Ranking of Security:"
+DISPLAY "1. SHA-256 (Best)"
+DISPLAY "2. SHA-1 (Moderate)"
+DISPLAY "3. MD5 (Weakest)"
+
+DISPLAY "Conclusion: Use SHA-256 for secure applications."
+
+ENDs
