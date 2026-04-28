@@ -1,7 +1,11 @@
 import hashlib
 import math
+from tkinter import filedialog, messagebox
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
-# ── HASH FUNCTIONS ────────────────────────────────
+
+# ── HASH FUNCTION ─────────────────────────────────
 def generate_hash(text, algo):
     data = text.encode()
 
@@ -15,110 +19,138 @@ def generate_hash(text, algo):
         return hashlib.sha512(data).hexdigest()
 
 
-# ── ENTROPY CALCULATION ────────────────────────────
-def calc_entropy(hex_str):
-    freq = {c: hex_str.count(c) for c in "0123456789abcdef"}
-    total = len(hex_str)
+# ── ENTROPY FUNCTION ──────────────────────────────
+def entropy(hash_value):
+    freq = {}
+    for c in hash_value:
+        freq[c] = freq.get(c, 0) + 1
 
-    entropy = -sum(
-        (f / total) * math.log2(f / total)
-        for f in freq.values()
-        if f > 0
-    )
-
-    return entropy, freq
+    total = len(hash_value)
+    e = -sum((f / total) * math.log2(f / total) for f in freq.values())
+    return e, freq
 
 
-# ── DISPLAY FINGERPRINT ────────────────────────────
-def print_fingerprint(name, freq_map):
-    max_freq = max(freq_map.values())
+# ── ANALYSIS ENGINE ───────────────────────────────
+class HashAnalyzer:
 
-    print("\nFingerprint Distribution:")
-    for k, v in freq_map.items():
-        bar = "█" * int((v / max_freq) * 30)
-        print(f"{k} : {bar} ({v})")
+    def __init__(self, text):
+        self.text = text
+        self.hashes = {}
+        self.results = {}
 
+    def run(self):
+        self.hashes = {
+            "MD5": generate_hash(self.text, "MD5"),
+            "SHA-1": generate_hash(self.text, "SHA-1"),
+            "SHA-256": generate_hash(self.text, "SHA-256"),
+            "SHA-512": generate_hash(self.text, "SHA-512"),
+        }
 
-# ── ANALYSIS ENGINE ────────────────────────────────
-def analyze(text):
+        self.results = {
+            "comparison": [
+                ("MD5", "128-bit", "BROKEN"),
+                ("SHA-1", "160-bit", "WEAK"),
+                ("SHA-256", "256-bit", "SECURE"),
+                ("SHA-512", "512-bit", "STRONG"),
+            ],
+            "avalanche": {
+                "original": self.text,
+                "modified": self.text[:-1] + "X" if self.text else "A"
+            },
+            "security": [
+                "MD5 → Collision attacks",
+                "SHA-1 → Deprecated",
+                "SHA-256 → Industry standard",
+                "SHA-512 → High security",
+            ],
+            "entropy": {}
+        }
 
-    print("\n" + "=" * 70)
-    print("🔐 HASH SECURITY ANALYZER (NO GUI VERSION)")
-    print("=" * 70)
+        for name, h in self.hashes.items():
+            e, freq = entropy(h)
+            self.results["entropy"][name] = {
+                "score": min(10, (e / 4.0) * 10),
+                "freq": freq
+            }
 
-    # ── Generate hashes ──
-    md5_h = generate_hash(text, "MD5")
-    sha1_h = generate_hash(text, "SHA-1")
-    sha256_h = generate_hash(text, "SHA-256")
-    sha512_h = generate_hash(text, "SHA-512")
+    # ── CONSOLE OUTPUT ───────────────────────────
+    def display(self):
+        print("\n🔐 HASH SECURITY ANALYSIS REPORT\n")
 
-    hashes = {
-        "MD5": md5_h,
-        "SHA-1": sha1_h,
-        "SHA-256": sha256_h,
-        "SHA-512": sha512_h
-    }
+        print("GENERATED HASHES")
+        for k, v in self.hashes.items():
+            print(f"{k}: {v}")
 
-    # ── 1. HASHES ──
-    print("\n📌 GENERATED HASHES")
-    for k, v in hashes.items():
-        print(f"{k}: {v}")
+        print("\nCOMPARISON TABLE")
+        for n, b, s in self.results["comparison"]:
+            print(f"{n:8} | {b:7} | {s}")
 
-    # ── 2. COMPARISON TABLE ──
-    print("\n📊 COMPARISON TABLE")
-    print("ALGO     | BITS   | STATUS")
-    print("-" * 40)
-    print("MD5      | 128    | BROKEN")
-    print("SHA-1    | 160    | WEAK")
-    print("SHA-256  | 256    | SECURE")
-    print("SHA-512  | 512    | MILITARY")
+        print("\nAVALANCHE EFFECT")
+        print("Original:", self.results["avalanche"]["original"])
+        print("Modified:", self.results["avalanche"]["modified"])
+        print("Small change → completely different hash")
 
-    # ── 3. AVALANCHE EFFECT ──
-    print("\n⚡ AVALANCHE EFFECT")
+        print("\nSECURITY ANALYSIS")
+        for s in self.results["security"]:
+            print(s)
 
-    changed_text = text[:-1] + (chr(ord(text[-1]) + 1) if text else "A")
+        print("\nENTROPY & FINGERPRINT SCORE")
 
-    original = generate_hash(text, "MD5")
-    modified = generate_hash(changed_text, "MD5")
+        for name, data in self.results["entropy"].items():
+            score = data["score"]
+            freq = data["freq"]
 
-    print(f"Original text : {text}")
-    print(f"Modified text : {changed_text}")
-    print(f"MD5 original  : {original}")
-    print(f"MD5 modified  : {modified}")
-    print("→ Tiny change completely changes hash output")
+            bar = "█" * int(score) + "░" * (10 - int(score))
 
-    # ── 4. SECURITY ANALYSIS ──
-    print("\n🛡 SECURITY ANALYSIS")
-    print("MD5    → Collision-prone, broken")
-    print("SHA-1  → Deprecated, vulnerable")
-    print("SHA-2  → Secure standard (industry use)")
+            print(f"\n{name} [{bar}] {score:.1f}/10")
 
-    print("\n🔐 FINAL VERDICT")
-    print("❌ Avoid MD5 & SHA-1")
-    print("✅ Use SHA-256 / SHA-512")
-    print("🔑 Passwords → use Argon2 / BCrypt")
+            print("Fingerprint breakdown:")
+            for char, count in sorted(freq.items()):
+                print(f"  {char} → {count} time(s)")
 
-    # ── 5. ENTROPY + FINGERPRINT FOR ALL HASHES ──
-    print("\n📈 HASH ENTROPY & FINGERPRINT ANALYSIS")
+    # ── PDF EXPORT ───────────────────────────────
+    def export_pdf(self, path):
+        c = canvas.Canvas(path, pagesize=A4)
+        y = 800
 
-    for name, h in hashes.items():
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, y, "HASH SECURITY REPORT")
+        y -= 40
 
-        entropy, freq = calc_entropy(h)
+        c.setFont("Helvetica", 11)
+        c.drawString(50, y, f"Input: {self.text}")
+        y -= 30
 
-        print("\n" + "-" * 50)
-        print(f"{name} → Entropy Score: {entropy:.4f}")
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "Generated Hashes")
+        y -= 20
 
-        print_fingerprint(name, freq)
+        for k, v in self.hashes.items():
+            c.drawString(50, y, f"{k}: {v}")
+            y -= 20
 
-        if entropy > 3.8:
-            print("🟢 HIGH ENTROPY → Strong randomness")
-        elif entropy > 3.4:
-            print("🟡 MEDIUM ENTROPY → Acceptable randomness")
-        else:
-            print("🔴 LOW ENTROPY → Weak pattern risk")
+        y -= 10
+        c.drawString(50, y, "Security Summary")
+        y -= 20
+
+        for s in self.results["security"]:
+            c.drawString(50, y, s)
+            y -= 18
+
+        c.save()
+        print("\nPDF exported successfully!")
 
 
 # ── RUN PROGRAM ───────────────────────────────────
 if __name__ == "__main__":
-    user_input = input("Enter text to analyze: ")
-    analyze(user_input)
+    text = input("Enter text to analyze: ")
+
+    analyzer = HashAnalyzer(text)
+    analyzer.run()
+    analyzer.display()
+
+    choice = input("\nExport PDF? (y/n): ")
+
+    if choice.lower() == "y":
+        path = input("Enter file name (e.g. report.pdf): ")
+        analyzer.export_pdf(path)

@@ -1,9 +1,13 @@
 import hashlib
 import tkinter as tk
-from tkinter import font
 import math
+from tkinter import filedialog, messagebox
 
-# ── Colors & Styling ────────────────────────────────
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+
+# ── COLORS ─────────────────────────────────────────
 BG = "#1e1e2e"
 CARD = "#13131f"
 ACCENT = "#7c6af7"
@@ -12,11 +16,12 @@ YELLOW = "#fbbf24"
 RED = "#f87171"
 CYAN = "#4ecdc4"
 WHITE = "#ffffff"
-BORDER = "#2a2a3a"
 
-# ── Hash Function Logic ────────────────────────────
+
+# ── HASH FUNCTION ─────────────────────────────────
 def generate_hash(text, algo):
     data = text.encode()
+
     if algo == "MD5":
         return hashlib.md5(data).hexdigest()
     elif algo == "SHA-1":
@@ -26,24 +31,38 @@ def generate_hash(text, algo):
     elif algo == "SHA-512":
         return hashlib.sha512(data).hexdigest()
 
-# ── Main App ───────────────────────────────────────
+
+# ── ENTROPY FUNCTION ──────────────────────────────
+def entropy(hash_value):
+    freq = {}
+    for c in hash_value:
+        freq[c] = freq.get(c, 0) + 1
+
+    total = len(hash_value)
+    e = -sum((f / total) * math.log2(f / total) for f in freq.values())
+    return e, freq
+
+
+# ── APP ────────────────────────────────────────────
 class HashApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Hash Security Analyzer Pro")
-        self.root.geometry("950x900")
+        self.root.geometry("1000x950")
         self.root.configure(bg=BG)
 
-        self.canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0)
-        self.scrollbar = tk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg=BG)
+        self.last_data = {}
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        # scroll system
+        self.canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
+        self.scrollbar = tk.Scrollbar(root, command=self.canvas.yview)
+        self.frame = tk.Frame(self.canvas, bg=BG)
+
+        self.frame.bind("<Configure>", lambda e:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         )
 
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.create_window((0, 0), window=self.frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
         self.canvas.pack(side="left", fill="both", expand=True)
@@ -51,181 +70,213 @@ class HashApp:
 
         self.build_ui()
 
-    # ── UI ────────────────────────────────
+    # ── UI ─────────────────────────────────────────
     def build_ui(self):
-        header = tk.Label(
-            self.scrollable_frame,
-            text="🔐 Hash Generator & Security Analyzer",
+        tk.Label(
+            self.frame,
+            text="🔐 HASH SECURITY ANALYZER DASHBOARD",
             bg=ACCENT,
             fg=WHITE,
-            font=("Consolas", 20, "bold"),
-            pady=20
-        )
-        header.pack(fill="x")
+            font=("Consolas", 18, "bold"),
+            pady=15
+        ).pack(fill="x")
 
-        input_container = tk.Frame(self.scrollable_frame, bg=BG, padx=30, pady=20)
-        input_container.pack(fill="x")
+        box = tk.Frame(self.frame, bg=BG, padx=25, pady=15)
+        box.pack(fill="x")
 
-        tk.Label(
-            input_container,
-            text="Input Data:",
-            bg=BG,
-            fg=WHITE,
-            font=("Consolas", 12, "bold")
-        ).pack(anchor="w")
+        tk.Label(box, text="Input Text:", bg=BG, fg=WHITE,
+                 font=("Consolas", 12, "bold")).pack(anchor="w")
 
         self.input_box = tk.Text(
-            input_container,
-            height=3,
-            font=("Consolas", 12),
+            box,
+            height=4,
             bg=CARD,
             fg=WHITE,
+            font=("Consolas", 12),
             insertbackground="white",
-            bd=0,
-            padx=10,
-            pady=10
+            bd=0
         )
-        self.input_box.pack(fill="x", pady=(5, 15))
+        self.input_box.pack(fill="x", pady=10)
         self.input_box.insert("1.0", "Security Engineering 2026")
 
+        self.input_box.bind("<KeyRelease>", lambda e: self.analyze())
+
         tk.Button(
-            input_container,
-            text="⚡ ANALYZE CRYPTOGRAPHIC STRENGTH",
+            box,
+            text="⚡ Analyze",
             command=self.analyze,
             bg=ACCENT,
             fg=WHITE,
             font=("Consolas", 12, "bold"),
-            cursor="hand2",
             bd=0,
-            pady=10
+            pady=8
+        ).pack(fill="x", pady=5)
+
+        tk.Button(
+            box,
+            text="📄 Export PDF Report",
+            command=self.export_pdf,
+            bg=CYAN,
+            fg="black",
+            font=("Consolas", 12, "bold"),
+            bd=0,
+            pady=8
         ).pack(fill="x")
 
-        self.results_area = tk.Frame(self.scrollable_frame, bg=BG, padx=30)
-        self.results_area.pack(fill="both", expand=True)
+        self.results = tk.Frame(self.frame, bg=BG, padx=25)
+        self.results.pack(fill="both", expand=True)
 
-    # ── Cards ────────────────────────────────
-    def create_card(self, title):
-        card = tk.LabelFrame(
-            self.results_area,
-            text=f" {title} ",
+        self.analyze()
+
+    # ── CARD ───────────────────────────────────────
+    def card(self, title):
+        c = tk.LabelFrame(
+            self.results,
+            text=" " + title + " ",
             bg=CARD,
             fg=ACCENT,
             font=("Consolas", 12, "bold"),
-            bd=1,
-            relief="flat",
-            padx=15,
-            pady=15
+            padx=10,
+            pady=10
         )
-        card.pack(fill="x", pady=10)
-        return card
+        c.pack(fill="x", pady=8)
+        return c
 
-    def write_line(self, parent, text, color=WHITE, bullet=False):
-        prefix = " • " if bullet else ""
-        tk.Label(
-            parent,
-            text=f"{prefix}{text}",
-            bg=CARD,
-            fg=color,
-            font=("Consolas", 10),
-            anchor="w",
-            justify="left"
-        ).pack(fill="x")
-
-    # ── Entropy Function ────────────────────────────────
-    def calc_entropy(self, hex_str):
-        freq = {c: hex_str.count(c) for c in "0123456789abcdef"}
-        total = len(hex_str)
-        e = -sum((f/total) * math.log2(f/total) for f in freq.values() if f > 0)
-        return e, freq
-
-    # ── Main Analysis ────────────────────────────────
+    # ── ANALYZE ────────────────────────────────────
     def analyze(self):
-        for widget in self.results_area.winfo_children():
-            widget.destroy()
+        for w in self.results.winfo_children():
+            w.destroy()
 
         text = self.input_box.get("1.0", "end-1c")
-        if not text:
+        if not text.strip():
             return
 
-        md5_h = generate_hash(text, "MD5")
-        sha1_h = generate_hash(text, "SHA-1")
-        sha256_h = generate_hash(text, "SHA-256")
-        sha512_h = generate_hash(text, "SHA-512")
-
-        # ── 1. HASHES ──
-        h_card = self.create_card("GENERATED HASHES")
-        self.write_line(h_card, f"MD5: {md5_h}", RED)
-        self.write_line(h_card, f"SHA-1: {sha1_h}", YELLOW)
-        self.write_line(h_card, f"SHA-256: {sha256_h}", GREEN)
-        self.write_line(h_card, f"SHA-512: {sha512_h}", CYAN)
-
-        # ── 2. COMPARISON ──
-        c_card = self.create_card("COMPARISON TABLE")
-        self.write_line(c_card, "ALGORITHM | BIT LENGTH | STATUS")
-        self.write_line(c_card, "-" * 50)
-        self.write_line(c_card, "MD5     | 128-bit | BROKEN", RED)
-        self.write_line(c_card, "SHA-1   | 160-bit | WEAK", YELLOW)
-        self.write_line(c_card, "SHA-256 | 256-bit | SECURE", GREEN)
-        self.write_line(c_card, "SHA-512 | 512-bit | MILITARY", CYAN)
-
-        # ── 3. AVALANCHE ──
-        a_card = self.create_card("AVALANCHE EFFECT")
-        changed_text = text[:-1] + (chr(ord(text[-1]) + 1) if text else "A")
-        changed_md5 = generate_hash(changed_text, "MD5")
-
-        self.write_line(a_card, f"Original: {text}")
-        self.write_line(a_card, f"Modified: {changed_text}")
-        self.write_line(a_card, f"MD5 Original: {md5_h}")
-        self.write_line(a_card, f"MD5 Modified: {changed_md5}")
-        self.write_line(a_card, "Tiny change → completely different hash", ACCENT)
-
-        # ── 4. SECURITY ──
-        s_card = self.create_card("SECURITY ANALYSIS")
-        self.write_line(s_card, "MD5 → Collision-prone", RED, True)
-        self.write_line(s_card, "SHA-1 → Deprecated", YELLOW, True)
-        self.write_line(s_card, "SHA-256/512 → Industry standard", GREEN, True)
-
-        # ── 5. FINAL VERDICT ──
-        v_card = self.create_card("FINAL VERDICT")
-        self.write_line(v_card, "Avoid MD5 & SHA-1", RED)
-        self.write_line(v_card, "Use SHA-256 / SHA-512", GREEN)
-        self.write_line(v_card, "Passwords → Argon2 / BCrypt", ACCENT)
-
-        # ── 6. ENTROPY + FINGERPRINT (ALL HASHES) ──
-        e_card = self.create_card("HASH ENTROPY & FINGERPRINT ANALYSIS")
-
         hashes = {
-            "MD5": md5_h,
-            "SHA-1": sha1_h,
-            "SHA-256": sha256_h,
-            "SHA-512": sha512_h
+            "MD5": generate_hash(text, "MD5"),
+            "SHA-1": generate_hash(text, "SHA-1"),
+            "SHA-256": generate_hash(text, "SHA-256"),
+            "SHA-512": generate_hash(text, "SHA-512"),
         }
 
+        self.last_data = {
+            "input": text,
+            "hashes": hashes
+        }
+
+        # ── GENERATED HASHES ──
+        c = self.card("GENERATED HASHES")
+        for k, v in hashes.items():
+            tk.Label(c, text=f"{k}: {v}", bg=CARD, fg=WHITE,
+                     font=("Consolas", 10)).pack(anchor="w")
+
+        # ── COMPARISON TABLE ──
+        c = self.card("COMPARISON TABLE")
+        table = [
+            ("MD5", "128-bit", "BROKEN", RED),
+            ("SHA-1", "160-bit", "WEAK", YELLOW),
+            ("SHA-256", "256-bit", "SECURE", GREEN),
+            ("SHA-512", "512-bit", "STRONG", CYAN),
+        ]
+
+        for n, b, s, col in table:
+            tk.Label(c, text=f"{n:8} | {b:7} | {s}",
+                     bg=CARD, fg=col, font=("Consolas", 10)).pack(anchor="w")
+
+        # ── AVALANCHE EFFECT ──
+        c = self.card("AVALANCHE EFFECT DEMO")
+        mod = text[:-1] + "X" if len(text) > 0 else "A"
+
+        tk.Label(c, text=f"Original: {text}", bg=CARD, fg=WHITE).pack(anchor="w")
+        tk.Label(c, text=f"Modified: {mod}", bg=CARD, fg=ACCENT).pack(anchor="w")
+        tk.Label(c, text="Small change → completely different hash",
+                 bg=CARD, fg=RED).pack(anchor="w")
+
+        # ── SECURITY ANALYSIS ──
+        c = self.card("SECURITY ANALYSIS")
+        for t, col in [
+            ("MD5 → Collision attacks", RED),
+            ("SHA-1 → Deprecated", YELLOW),
+            ("SHA-256 → Industry standard", GREEN),
+            ("SHA-512 → High security", CYAN),
+        ]:
+            tk.Label(c, text=t, bg=CARD, fg=col).pack(anchor="w")
+
+        # ── FINAL VERDICT ──
+        c = self.card("FINAL VERDICT")
+        tk.Label(c, text="❌ Avoid MD5 & SHA-1", bg=CARD, fg=RED).pack(anchor="w")
+        tk.Label(c, text="✔ Use SHA-256 / SHA-512", bg=CARD, fg=GREEN).pack(anchor="w")
+
+        # ── ENTROPY & FINGERPRINT SCORE ──
+        c = self.card("ENTROPY & FINGERPRINT SCORE")
+
         for name, h in hashes.items():
-            e_score, freq_map = self.calc_entropy(h)
+            e, freq = entropy(h)
 
-            self.write_line(e_card, f"{name} → Entropy: {e_score:.4f}", CYAN)
+            score = min(10, (e / 4.0) * 10)
+            bar = "█" * int(score) + "░" * (10 - int(score))
 
-            bar_frame = tk.Frame(e_card, bg=CARD)
-            bar_frame.pack(fill="x", pady=5)
+            tk.Label(
+                c,
+                text=f"{name:<7} [{bar}] {score:.1f}/10",
+                bg=CARD,
+                fg=WHITE,
+                font=("Consolas", 11, "bold")
+            ).pack(anchor="w")
 
-            max_freq = max(freq_map.values())
+            # ── DETAILED FINGERPRINT ──
+            tk.Label(
+                c,
+                text="Fingerprint breakdown:",
+                bg=CARD,
+                fg=ACCENT,
+                font=("Consolas", 10, "bold")
+            ).pack(anchor="w")
 
-            for k, v in freq_map.items():
-                bar = "█" * int((v / max_freq) * 25)
-                self.write_line(bar_frame, f"{k}: {bar} ({v})", ACCENT)
+            for char, count in sorted(freq.items()):
+                tk.Label(
+                    c,
+                    text=f"   {char} → {count} time(s)",
+                    bg=CARD,
+                    fg=GREEN,
+                    font=("Consolas", 9)
+                ).pack(anchor="w")
 
-            if e_score > 3.8:
-                msg, col = "HIGH ENTROPY → Strong randomness", GREEN
-            elif e_score > 3.4:
-                msg, col = "MEDIUM ENTROPY → Acceptable", YELLOW
-            else:
-                msg, col = "LOW ENTROPY → Weak pattern risk", RED
+            tk.Label(c, text="─" * 60, bg=CARD, fg=WHITE).pack(anchor="w")
 
-            self.write_line(e_card, msg, col)
-            self.write_line(e_card, "─" * 60, WHITE)
+    # ── EXPORT PDF ────────────────────────────────
+    def export_pdf(self):
+        if not self.last_data:
+            messagebox.showwarning("Warning", "Run analysis first")
+            return
 
-# ── RUN APP ───────────────────────────────────────
+        path = filedialog.asksaveasfilename(defaultextension=".pdf")
+        if not path:
+            return
+
+        try:
+            c = canvas.Canvas(path, pagesize=A4)
+            y = 800
+
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(50, y, "HASH SECURITY REPORT")
+            y -= 40
+
+            c.setFont("Helvetica", 11)
+            c.drawString(50, y, f"Input: {self.last_data['input']}")
+            y -= 30
+
+            for k, v in self.last_data["hashes"].items():
+                c.drawString(50, y, f"{k}: {v}")
+                y -= 20
+
+            c.save()
+            messagebox.showinfo("Success", "PDF exported successfully!")
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+
+# ── RUN ───────────────────────────────────────────
 if __name__ == "__main__":
     root = tk.Tk()
     app = HashApp(root)
